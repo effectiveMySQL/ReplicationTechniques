@@ -1,0 +1,51 @@
+# Effective MySQL: Replication Techniques In Depth by Ronald Bradford and Chris Schneider
+# http://effectivemysql.com/book/replication-techniques/
+
+#
+# chapter01.txt
+#
+CREATE SCHEMA IF NOT EXISTS book3;
+USE book3;
+
+# 
+# Pre-requisite table for queries
+#
+CREATE TABLE product_comment (
+  comment_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  product_id INT UNSIGNED NOT NULL,
+  user_id    INT UNSIGNED NOT NULL,
+  comment_dt DATETIME NOT NULL,
+  comment    VARCHAR(1000) NOT NULL,
+  PRIMARY KEY (comment_id),
+  UNIQUE KEY user_id (user_id,comment_dt)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+
+#
+# SHOW SLAVE STATUS
+#
+SHOW SLAVE STATUS\G
+
+#
+# SHOW CREAT TABLE
+#
+SHOW CREATE TABLE product_comment\G
+SELECT * FROM product_comment WHERE user_id = 42 AND comment_dt = '2011-04-16 00:00:00'\G
+
+#
+# SQL_SLAVE_SKIP_COUNTER
+#
+SET GLOBAL SQL_SLAVE_SKIP_COUNTER = 1; 
+START SLAVE SQL_THREAD;
+SHOW SLAVE STATUS\G
+
+SELECT COUNT(*) FROM product_comment WHERE user_id=42;o
+
+#
+# Addressing the Underlying Cause
+#
+SET SQL_LOG_BIN=0;
+ALTER TABLE product_comment DROP INDEX user_id, ADD INDEX (user_id, comment_dt);
+SET SQL_LOG_BIN=1;
+
+# END
