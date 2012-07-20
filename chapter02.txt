@@ -1,0 +1,112 @@
+# Effective MySQL: Replication Techniques In Depth by Ronald Bradford and Chris Schneider
+# http://effectivemysql.com/book/replication-techniques/
+
+#
+# chapter02.txt
+#
+
+# Binary Logs
+MYCNF="/etc/my.cnf"
+BINLOG=`grep log-bin ${MYCNF} | cut -d'=' -f2`
+echo ${BINLOG}
+DIR=`dirname ${BINLOG}`
+cd ${DIR}
+ls -lh *
+cat *.index
+
+cd ${DIR}
+mysqlbinlog `pwd`/mysql-bin.000001
+
+stat mysql-bin.000001
+ls -l mysql-bin.000001
+
+mysql -uroot –p -e "SHOW MASTER STATUS\G"
+
+
+# Binary Log Management
+PURGE BINARY LOGS TO 'mysql-bin.000005';
+PURGE BINARY LOGS BEFORE '2011-10-31 09:00:00';
+
+# SHOW MASTER LOGS
+SHOW MASTER LOGS;
+rm –f mysql-bin.000009 mysql-bin.000010 mysql-bin.000011
+SHOW MASTER LOGS;
+SHOW WARNINGS\G
+PURGE MASTER LOGS TO 'mysql-bin.000012';
+
+# SHOW MASTER STATUS
+SHOW MASTER STATUS\G
+
+# SHOW SLAVE STATUS
+SHOW SLAVE STATUS\G
+
+# Relay Logs
+mysqlbinlog mysqld-relay-bin.000005
+
+
+# Identifying Schema Inconsistencies
+SHOW GLOBAL STATUS LIKE 'Com_alter%';
+
+MASTER="alpha"
+MASTER="beta"
+mysqldump -uroot -ppasswd -h${MASTER} --no-data --skip-dump-date --databases test | md5sum
+mysqldump -uroot -ppasswd -h${SLAVE} --no-data --skip-dump-date --databases test | md5sum
+mysqldump -uroot -ppasswd -h${MASTER} --no-data --skip-dump-date --databases test | sed -e "s/AUTO_INCREMENT=[0-9]* //" | md5sum
+mysqldump -uroot -ppasswd -h${SLAVE} --no-data --skip-dump-date --databases test | sed -e "s/AUTO_INCREMENT=[0-9]* //" | md5sum
+
+
+# SBR Schema Validation
+SET SESSION binlog_format=ROW;
+CREATE SCHEMA IF NOT EXISTS book3;
+USE book3
+CREATE TABLE rbr_test(
+  id INT UNSIGNED NOT NULL,
+  val CHAR(3) NOT NULL,
+  comment VARCHAR(55) DEFAULT NULL,
+  PRIMARY KEY(id)
+) ENGINE=InnoDB;
+INSERT INTO rbr_test (id,val,comment) VALUES (1,'aaa','hello test');
+
+# Apply on Slave
+USE book3
+ALTER TABLE rbr_test MODIFY comment TEXT; 
+
+# Test on Master
+SET SESSION binlog_format=ROW;
+USE book3
+INSERT INTO rbr_test (id,val,comment) VALUES (3,'ccc','hello test');
+
+# Verify on Slave
+SHOW SLAVE STATUS\G
+
+#Master Server Id
+SHOW SLAVE STATUS\G
+
+
+# Missing Schema Objects
+CREATE SCHEMA IF NOT EXISTS book3;
+USE book3
+SET SESSION SQL_LOG_BIN=0;
+CREATE TABLE no_tbl_on_slave(id INT UNSIGNED NOT NULL);
+SET SESSION SQL_LOG_BIN=1;
+INSERT INTO no_tbl_on_slave(id) VALUES(1);
+
+# Ignoring Duplicate Rows
+CREATE SCHEMA IF NOT EXISTS book3;
+USE book3
+CREATE TABLE uniq_test (
+  id INT UNSIGNED NOT NULL
+) ENGINE=InnoDB;
+
+
+# On slave
+ALTER TABLE uniq_test ADD UNIQUE KEY (id);
+
+# On Master
+INSERT INTO uniq_test(id) VALUES(1); 
+INSERT INTO uniq_test(id) VALUES(1),(2),(3); 
+SELECT * FROM uniq_test; 
+
+# On Slave
+SELECT * FROM uniq_test; 
+SHOW SLAVE STATUS\G
